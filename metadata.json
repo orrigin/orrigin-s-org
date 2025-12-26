@@ -1,0 +1,7 @@
+{
+  "name": "AarogyaAI",
+  "description": "An AI-powered health navigation tool that helps users identify the right doctor specialization based on symptoms.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

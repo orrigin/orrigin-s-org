@@ -167,7 +167,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center md:items-end mb-12 lg:mb-16 gap-6 text-center md:text-left">
             <div>
-              <h2 className="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter">Verified Doctors in Palghar</h2>
+              <h2 className="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter"> List of Doctors </h2>
               <p className="text-slate-500 dark:text-slate-400 text-lg font-medium">Trusted medical professionals available in your region</p>
             </div>
             <button 

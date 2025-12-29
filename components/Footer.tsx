@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { ViewState } from '../types';
+import { supabase } from '../services/supabaseClient';
 
 interface FooterProps {
   onNavigate: (view: ViewState) => void;
@@ -14,6 +15,10 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState(false);
   const [activeModal, setActiveModal] = useState<'privacy' | 'terms' | 'disclaimer' | 'about' | 'contact' | null>(null);
+  
+  const [senderName, setSenderName] = useState('');
+  const [senderMessage, setSenderMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [messageSent, setMessageSent] = useState(false);
 
   const handleAdminSubmit = async (e: React.FormEvent) => {
@@ -34,13 +39,30 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
     setIsAuthenticating(false);
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMessageSent(true);
-    setTimeout(() => {
-      setMessageSent(false);
-      setActiveModal(null);
-    }, 2000);
+    setIsSending(true);
+    
+    try {
+      const { error: insertError } = await supabase
+        .from('broadcast_messages')
+        .insert([{ name: senderName, message: senderMessage }]);
+
+      if (insertError) throw insertError;
+
+      setMessageSent(true);
+      setSenderName('');
+      setSenderMessage('');
+      setTimeout(() => {
+        setMessageSent(false);
+        setActiveModal(null);
+      }, 3000);
+    } catch (err) {
+      console.error("Transmission Error:", err);
+      alert("Failed to transmit to uplink. Check network logs.");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const renderModal = () => {
@@ -59,14 +81,6 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
               <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">2. Data Sovereignty</h4>
               <p>Your clinical data never leaves Indian territory. We utilize edge computing nodes located in regional clusters (e.g., Mumbai/Pune) to ensure low-latency, localized processing.</p>
             </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">3. Zero-Knowledge Architecture</h4>
-              <p>We do not store plain-text symptoms. Inputs are converted into high-dimensional vectors for specialist mapping and then flushed from volatile memory within 300 seconds of the session end.</p>
-            </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">4. User Agency</h4>
-              <p>You have the absolute right to export or purge your history. We do not use your data for algorithmic training of third-party pharmaceutical models.</p>
-            </div>
           </div>
         )
       },
@@ -77,18 +91,6 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
             <div>
               <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">1. Scope of Service</h4>
               <p>AarogyaAI is a high-level medical routing protocol. It is designed to navigate users toward validated clinical nodes. It does not provide medical services, prescriptions, or definitive diagnoses.</p>
-            </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">2. Registry Integrity</h4>
-              <p>Doctors joining the network warrant that they hold active, valid registrations with the National Medical Commission (NMC). Users are encouraged to double-verify credentials at the physical clinical node.</p>
-            </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">3. Prohibited Usage</h4>
-              <p>The platform must not be used for emergency diagnostic avoidance. Automated scraping of the doctor registry is strictly prohibited and protected by anti-bot neural firewalls.</p>
-            </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">4. Liability Boundary</h4>
-              <p>AarogyaAI acts as a neutral technological bridge. The final clinical outcome is solely the responsibility of the licensed practitioner and the patient.</p>
             </div>
           </div>
         )
@@ -103,18 +105,6 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
               </p>
               <p className="font-bold">AarogyaAI does NOT provide medical diagnoses or professional medical advice.</p>
             </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">1. Emergency Situations</h4>
-              <p>If you are experiencing chest pain, severe bleeding, difficulty breathing, or sudden numbness, DISCONNECT IMMEDIATELY and call 108 or proceed to the nearest trauma center.</p>
-            </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">2. Probabilistic Mapping</h4>
-              <p>AI-driven specialist suggestions are based on statistical patterns in general medical literature. They may not account for your specific co-morbidities or unique physiological profile.</p>
-            </div>
-            <div>
-              <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-2">3. Human Validation</h4>
-              <p>The AI is a tool to reduce navigation friction, not to replace the clinical judgment of a human physician. Always verify the routing with a healthcare professional.</p>
-            </div>
           </div>
         )
       },
@@ -123,17 +113,6 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
         body: (
           <div className="space-y-6 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
             <p>AarogyaAI was born from a simple observation: Indian patients often waste critical time visiting the wrong specialists. In rural and semi-urban districts like Palghar, finding the right door is half the battle.</p>
-            <p>Our mission is to democratize medical navigation using state-of-the-art Generative AI, making it accessible even to those who struggle to articulate medical terminology.</p>
-            <div className="grid grid-cols-2 gap-4 pt-4">
-              <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10">
-                <h5 className="font-black text-emerald-500 text-[10px] uppercase tracking-widest mb-1">Impact</h5>
-                <p className="text-xs font-bold text-slate-900 dark:text-white">10k+ Navigations</p>
-              </div>
-              <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10">
-                <h5 className="font-black text-emerald-500 text-[10px] uppercase tracking-widest mb-1">Nodes</h5>
-                <p className="text-xs font-bold text-slate-900 dark:text-white">Verified Local List</p>
-              </div>
-            </div>
           </div>
         )
       },
@@ -145,13 +124,33 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
               <form onSubmit={handleSendMessage} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest ml-2">Your Identity</label>
-                  <input type="text" required placeholder="Name or Citizen ID" className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 dark:text-white font-bold" />
+                  <input 
+                    type="text" 
+                    required 
+                    value={senderName}
+                    onChange={(e) => setSenderName(e.target.value)}
+                    placeholder="Name or Citizen ID" 
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 dark:text-white font-bold" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest ml-2">Message Content</label>
-                  <textarea required rows={4} placeholder="How can the network assist you today?" className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 dark:text-white font-bold resize-none" />
+                  <textarea 
+                    required 
+                    rows={4} 
+                    value={senderMessage}
+                    onChange={(e) => setSenderMessage(e.target.value)}
+                    placeholder="How can the network assist you today?" 
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 dark:text-white font-bold resize-none" 
+                  />
                 </div>
-                <button type="submit" className="w-full py-4 bg-emerald-500 text-white dark:text-slate-950 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-400 transition-all shadow-lg">Transmit to Uplink</button>
+                <button 
+                  type="submit" 
+                  disabled={isSending}
+                  className="w-full py-4 bg-emerald-500 text-white dark:text-slate-950 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-emerald-400 transition-all shadow-lg disabled:opacity-50"
+                >
+                  {isSending ? <i className="fas fa-circle-notch animate-spin mr-2"></i> : 'Transmit to Uplink'}
+                </button>
               </form>
             ) : (
               <div className="py-12 text-center animate-in zoom-in-95">
@@ -203,7 +202,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
           <div>
             <h4 className="font-black text-slate-900 dark:text-white text-[10px] uppercase tracking-[0.4em] mb-6 lg:mb-8">Navigation</h4>
             <ul className="space-y-4 text-[10px] font-black uppercase tracking-widest">
-              <li><button onClick={() => onNavigate('home')} className="text-slate-400 hover:text-emerald-500 transition-colors">Registry Home</button></li>
+              <li><button onClick={() => onNavigate('home')} className="text-slate-400 hover:text-emerald-500 transition-colors">Home</button></li>
               <li><button onClick={() => onNavigate('find-doctor')} className="text-slate-400 hover:text-emerald-500 transition-colors">Check Symptoms</button></li>
               <li><button onClick={() => onNavigate('doctor-list')} className="text-slate-400 hover:text-emerald-500 transition-colors">Verified Doctors</button></li>
               <li><button onClick={() => onNavigate('join-doctor')} className="text-slate-400 hover:text-emerald-500 transition-colors">Join as a Doctor</button></li>
@@ -218,7 +217,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
             </ul>
           </div>
           <div>
-            <h4 className="font-black text-slate-900 dark:text-white text-[10px] uppercase tracking-[0.4em] mb-6 lg:mb-8">Network Node</h4>
+            <h4 className="font-black text-slate-900 dark:text-white text-[10px] uppercase tracking-[0.4em] mb-6 lg:mb-8"> About us </h4>
             <ul className="space-y-4 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-colors">
               <li><button onClick={() => setActiveModal('about')} className="hover:text-emerald-500 text-left">About Our Mission</button></li>
               <li><button onClick={() => setActiveModal('contact')} className="hover:text-emerald-500 text-left">Broadcast Message</button></li>

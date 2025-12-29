@@ -21,11 +21,11 @@ export interface DoctorApplication {
   registration_no: string;
   email: string;
   specialization: string;
-  experience: string; // Added field
+  experience: string; 
   region: string;
   phone: string;
   timing: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected';
   created_at: string;
 }
 

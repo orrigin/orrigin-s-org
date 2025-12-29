@@ -16,7 +16,7 @@
     body {
       font-family: 'Inter', sans-serif;
       scroll-behavior: smooth;
-      background-color: #020617; /* slate-950 */
+      transition: background-color 0.3s ease, color 0.3s ease;
     }
 
     /* Custom Scrollbar Styling */
@@ -30,8 +30,12 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #1e293b; /* slate-800 */
+      background: #e2e8f0; /* slate-200 */
       border-radius: 10px;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background: #1e293b; /* slate-800 */
     }
 
     ::-webkit-scrollbar-thumb:hover {
@@ -47,21 +51,32 @@
       display: none;
     }
 
-    .scroll-shadow-right {
-      position: relative;
+    .animate-in {
+      animation-duration: 0.5s;
     }
-    .scroll-shadow-right::after {
-      content: '';
-      position: absolute;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 40px;
-      background: linear-gradient(to left, rgba(2, 6, 23, 1), rgba(2, 6, 23, 0));
-      pointer-events: none;
-      z-index: 10;
+
+    /* Mobile Text & Border Radius scaling */
+    @media (max-width: 640px) {
+      h1 { font-size: 2.25rem !important; line-height: 2.5rem !important; }
+      h2 { font-size: 1.875rem !important; line-height: 2.25rem !important; }
+      .p-10 { padding: 1.5rem !important; }
+      .p-16 { padding: 2rem !important; }
+      .rounded-\[56px\], .rounded-\[64px\] { border-radius: 2rem !important; }
+      .rounded-\[48px\] { border-radius: 1.5rem !important; }
     }
   </style>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            emerald: { 500: '#10b981' }
+          }
+        }
+      }
+    }
+  </script>
 <script type="importmap">
 {
   "imports": {
@@ -74,7 +89,7 @@
 }
 </script>
 </head>
-<body class="bg-slate-950 text-slate-100">
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
   <div id="root"></div>
 </body>
 </html>

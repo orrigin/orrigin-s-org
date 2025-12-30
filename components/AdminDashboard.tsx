@@ -7,25 +7,24 @@ interface AdminDashboardProps {
   onBack: () => void;
 }
 
-interface BroadcastMessage {
-  id: string;
-  name: string;
-  message: string;
-  created_at: string;
-}
-
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [applications, setApplications] = useState<DoctorApplication[]>([]);
   const [liveDoctors, setLiveDoctors] = useState<Doctor[]>([]);
-  const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [view, setView] = useState<'pending' | 'history' | 'manual' | 'registry' | 'messages'>('pending');
+  const [view, setView] = useState<'pending' | 'manual' | 'registry'>('pending');
   const [confirmDelete, setConfirmDelete] = useState<{id: string, name: string} | null>(null);
   
   const [manualDoc, setManualDoc] = useState({
-    name: '', specialization: 'General Physician', experience: '', region: '', 
-    location: '', clinic: '', phone: '', timing: '10:00 AM - 07:00 PM', fees: '₹500'
+    name: '', 
+    specialization: 'General Physician', 
+    experience: '', 
+    region: '', 
+    location: '', 
+    phone: '', 
+    timing: '10:00 AM - 07:00 PM', 
+    fees: '₹500'
   });
 
   useEffect(() => {
@@ -34,22 +33,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const [appsRes, docsRes, msgsRes] = await Promise.all([
+      const [appsRes, docsRes] = await Promise.all([
         supabase.from('applications').select('*').order('created_at', { ascending: false }),
-        supabase.from('doctors').select('*').order('name', { ascending: true }),
-        supabase.from('broadcast_messages').select('*').order('created_at', { ascending: false })
+        supabase.from('doctors').select('*').order('name', { ascending: true })
       ]);
 
       if (appsRes.error) throw appsRes.error;
       if (docsRes.error) throw docsRes.error;
-      if (msgsRes.error) throw msgsRes.error;
 
       setApplications(appsRes.data || []);
       setLiveDoctors(docsRes.data || []);
-      setBroadcastMessages(msgsRes.data || []);
     } catch (err: any) {
       console.error("Sync Failure:", err.message);
+      setError("Network Sync Failure: Unable to reach the clinical database.");
     } finally {
       setLoading(false);
     }
@@ -57,33 +55,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const handleApprove = async (app: DoctorApplication) => {
     setProcessingId(app.id);
+    setError(null);
     try {
-      const { error: updateError } = await supabase
-        .from('applications')
-        .update({ status: 'accepted' })
-        .eq('id', app.id);
-      
-      if (updateError) throw updateError;
-
+      // 1. Prepare Doctor Data
       const doctorData = { 
         name: app.full_name, 
         specialization: app.specialization, 
         experience: app.experience, 
         region: app.region, 
         location: app.region, 
-        clinic: 'Verified Clinical Hub', 
         phone: app.phone, 
         timing: app.timing || '10:00 AM - 07:00 PM', 
         fees: '₹500'
       };
       
+      // 2. Insert into Doctors table FIRST
       const { error: insertError } = await supabase.from('doctors').insert([doctorData]);
-      if (insertError) throw insertError;
+      if (insertError) {
+        throw new Error(`Registry Injection Failed: ${insertError.message}`);
+      }
+
+      // 3. Update Application Status ONLY after successful doctor creation
+      const { error: updateError } = await supabase
+        .from('applications')
+        .update({ status: 'accepted' })
+        .eq('id', app.id);
+      
+      if (updateError) {
+        console.warn("Status Sync Failed, but Doctor record created.");
+      }
       
       await fetchData();
       setView('registry');
     } catch (err: any) {
       console.error("Verification Rejected:", err.message);
+      setError(err.message || "Credential verification failed.");
     } finally {
       setProcessingId(null);
     }
@@ -92,14 +98,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     try {
       const { error } = await supabase.from('doctors').insert([manualDoc]);
       if (error) throw error;
-      setManualDoc({ name: '', specialization: 'General Physician', experience: '', region: '', location: '', clinic: '', phone: '', timing: '10:00 AM - 07:00 PM', fees: '₹500' });
+      setManualDoc({ name: '', specialization: 'General Physician', experience: '', region: '', location: '', phone: '', timing: '10:00 AM - 07:00 PM', fees: '₹500' });
       await fetchData();
       setView('registry');
     } catch (err: any) {
       console.error("Injection Error:", err.message);
+      setError(`Manual Entry Failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -110,20 +118,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     const { id } = confirmDelete;
     setConfirmDelete(null);
     setProcessingId(id);
+    setError(null);
     
     try {
       const { error } = await supabase.from('doctors').delete().eq('id', id);
       if (error) throw error;
       await fetchData();
     } catch (err: any) {
-      console.error("Decommission Error:", err.message);
+      console.error("Removal Error:", err.message);
+      setError(`Deletion Failed: ${err.message}`);
     } finally {
       setProcessingId(null);
     }
   };
 
   const pendingApps = applications.filter(a => a.status === 'pending');
-  const historyApps = applications.filter(a => a.status !== 'pending');
 
   const renderContent = () => {
     if (loading) {
@@ -154,41 +163,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 <input required type="text" value={manualDoc.experience} onChange={e => setManualDoc({...manualDoc, experience: e.target.value})} placeholder="e.g. 15 Years" className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none text-slate-900 dark:text-white font-bold" />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Region</label>
+                <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Region / City</label>
                 <input required type="text" value={manualDoc.region} onChange={e => setManualDoc({...manualDoc, region: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none text-slate-900 dark:text-white font-bold" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Phone</label>
                 <input required type="text" value={manualDoc.phone} onChange={e => setManualDoc({...manualDoc, phone: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none text-slate-900 dark:text-white font-bold" />
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Consultation Fee</label>
-                <input required type="text" value={manualDoc.fees} onChange={e => setManualDoc({...manualDoc, fees: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl outline-none text-slate-900 dark:text-white font-bold" />
-              </div>
             </div>
             <button type="submit" className="w-full py-4 bg-emerald-500 text-white dark:text-slate-950 rounded-xl font-black uppercase tracking-widest text-[11px] hover:bg-emerald-400 shadow-xl shadow-emerald-500/10">Activate Registry Node</button>
             <button type="button" onClick={() => setView('registry')} className="w-full py-4 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-white rounded-xl font-black uppercase tracking-widest text-[11px] hover:bg-slate-200 dark:hover:bg-white/10">Cancel</button>
           </form>
-        </div>
-      );
-    }
-
-    if (view === 'messages') {
-      return (
-        <div className="p-8 lg:p-12 space-y-6">
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8 tracking-tighter uppercase">Citizen Broadcasts</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {broadcastMessages.map(msg => (
-              <div key={msg.id} className="bg-slate-50 dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-white/5 hover:border-emerald-500/30 transition-colors">
-                <div className="flex justify-between items-center mb-4">
-                  <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">{msg.name}</p>
-                  <p className="text-[9px] text-slate-500 font-mono">{new Date(msg.created_at).toLocaleString()}</p>
-                </div>
-                <p className="text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed">{msg.message}</p>
-              </div>
-            ))}
-          </div>
-          {broadcastMessages.length === 0 && <p className="text-center py-20 text-slate-500 font-black uppercase tracking-widest text-[10px]">No messages broadcasted.</p>}
         </div>
       );
     }
@@ -199,9 +184,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-200 dark:border-white/5">
-                <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Live registry Node</th>
-                <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Location</th>
-                <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest text-right">Maintenance</th>
+                <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Doctor / Specialty</th>
+                <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Contact / Location</th>
+                <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest text-right">Registry Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -212,10 +197,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                     <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-widest">{doc.specialization}</p>
                   </td>
                   <td className="px-8 py-6">
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase">{doc.region}</p>
+                    <p className="text-[11px] text-slate-900 dark:text-slate-200 font-black mb-1">{doc.phone}</p>
+                    <p className="text-[9px] text-slate-400 dark:text-slate-600 font-bold uppercase">{doc.region}</p>
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <button onClick={() => setConfirmDelete({ id: doc.id, name: doc.name })} className="bg-red-500/10 text-red-500 px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Decommission</button>
+                    <button onClick={() => setConfirmDelete({ id: doc.id, name: doc.name })} className="bg-red-500/10 text-red-500 px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">Remove</button>
                   </td>
                 </tr>
               ))}
@@ -232,19 +218,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-200 dark:border-white/5">
               <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Medical Identity</th>
-              <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Experience</th>
+              <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Licence No</th>
+              <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest">Location</th>
               <th className="px-8 py-6 text-[9px] font-black uppercase text-emerald-600 tracking-widest text-right">Verification</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-            {(view === 'pending' ? pendingApps : historyApps).map(app => (
+            {pendingApps.map(app => (
               <tr key={app.id} className="hover:bg-emerald-500/5 transition-colors">
                 <td className="px-8 py-6">
                   <p className="font-black text-slate-900 dark:text-white text-base mb-1">{app.full_name}</p>
                   <p className="text-[9px] text-emerald-600 font-black uppercase tracking-widest">{app.specialization}</p>
                 </td>
                 <td className="px-8 py-6">
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase">{app.experience}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold uppercase">{app.registration_no}</p>
+                </td>
+                <td className="px-8 py-6">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase">{app.region}</p>
                 </td>
                 <td className="px-8 py-6 text-right">
                   {app.status === 'pending' ? (
@@ -253,7 +243,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                       disabled={processingId === app.id}
                       className="bg-emerald-500 text-white dark:text-slate-950 px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg disabled:opacity-50"
                     >
-                      {processingId === app.id ? <i className="fas fa-circle-notch animate-spin"></i> : "Verify Node"}
+                      {processingId === app.id ? <i className="fas fa-satellite-dish animate-spin"></i> : "Verify Node"}
                     </button>
                   ) : (
                     <span className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase border ${app.status === 'accepted' ? 'text-emerald-600 border-emerald-500/20 bg-emerald-500/5' : 'text-red-500 border-red-500/20 bg-red-500/5'}`}>{app.status}</span>
@@ -263,8 +253,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             ))}
           </tbody>
         </table>
-        {(view === 'pending' ? pendingApps : historyApps).length === 0 && (
-          <p className="text-center py-20 text-slate-500 font-black uppercase tracking-widest text-[10px]">No applications found.</p>
+        {pendingApps.length === 0 && (
+          <p className="text-center py-20 text-slate-500 font-black uppercase tracking-widest text-[10px]">No pending applications found.</p>
         )}
       </div>
     );
@@ -278,13 +268,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             <div className="w-20 h-20 bg-red-500/10 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-8 text-3xl border border-red-500/20 animate-pulse">
               <i className="fas fa-radiation"></i>
             </div>
-            <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter uppercase">Purge Confirmation</h2>
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter uppercase">Confirmation</h2>
             <p className="text-slate-500 dark:text-slate-400 font-bold mb-10 leading-relaxed uppercase text-[10px] tracking-widest">
-              Permanently decommission <span className="text-red-500 underline decoration-red-500/20 underline-offset-4">{confirmDelete.name}</span>?
+              Permanently remove <span className="text-red-500 underline decoration-red-500/20 underline-offset-4">{confirmDelete.name}</span>?
             </p>
             <div className="flex flex-col gap-3">
-              <button onClick={executeDeletion} className="w-full py-5 bg-red-500 text-white dark:text-slate-950 rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-red-400 transition-all shadow-xl shadow-red-500/20">Execute Purge</button>
-              <button onClick={() => setConfirmDelete(null)} className="w-full py-5 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-white rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-slate-200 dark:hover:bg-white/10 transition-all">Abort Protocol</button>
+              <button onClick={executeDeletion} className="w-full py-5 bg-red-500 text-white dark:text-slate-950 rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-red-400 transition-all shadow-xl shadow-red-500/20">Remove Doctor</button>
+              <button onClick={() => setConfirmDelete(null)} className="w-full py-5 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-white rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-slate-200 dark:hover:bg-white/10 transition-all">Cancel</button>
             </div>
           </div>
         </div>
@@ -307,19 +297,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         <div className="flex flex-wrap items-center justify-end gap-3 lg:gap-4 w-full lg:w-auto">
           <div className="bg-white dark:bg-slate-900 p-1 rounded-2xl flex border border-slate-200 dark:border-white/5 shadow-sm overflow-x-auto hide-scrollbar w-full sm:w-auto">
             <button onClick={() => setView('pending')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'pending' ? 'bg-emerald-500 text-white dark:text-slate-950 shadow-lg' : 'text-slate-400'}`}>Pending ({pendingApps.length})</button>
-            <button onClick={() => setView('registry')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'registry' ? 'bg-emerald-500 text-white dark:text-slate-950 shadow-lg' : 'text-slate-400'}`}>Registry ({liveDoctors.length})</button>
-            <button onClick={() => setView('messages')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'messages' ? 'bg-emerald-500 text-white dark:text-slate-950 shadow-lg' : 'text-slate-400'}`}>Messages ({broadcastMessages.length})</button>
-            <button onClick={() => setView('history')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'history' ? 'bg-emerald-500 text-white dark:text-slate-950 shadow-lg' : 'text-slate-400'}`}>Logbook</button>
+            <button onClick={() => setView('registry')} className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'registry' ? 'bg-emerald-500 text-white dark:text-slate-950 shadow-lg' : 'text-slate-400'}`}>All Doctors ({liveDoctors.length})</button>
           </div>
           <button 
             onClick={() => setView('manual')} 
             className={`bg-white dark:bg-white/5 text-slate-600 dark:text-white border border-slate-200 dark:border-white/10 px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest hover:border-emerald-500 transition-all ${view === 'manual' ? 'border-emerald-500 text-emerald-500' : ''}`}
           >
-            <i className="fas fa-plus mr-2"></i> Inject Node
+            <i className="fas fa-plus mr-2"></i> Add Doctor
           </button>
           <button onClick={onBack} className="bg-slate-900 dark:bg-slate-800 text-white px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-500 transition-all">Disconnect</button>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-500/10 text-red-600 dark:text-red-400 rounded-2xl border border-red-500/20 flex items-center justify-between animate-in slide-in-from-top-4">
+          <div className="flex items-center">
+            <i className="fas fa-exclamation-circle mr-3"></i>
+            <span className="text-[10px] font-black uppercase tracking-widest">{error}</span>
+          </div>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600"><i className="fas fa-times"></i></button>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900/40 rounded-[32px] md:rounded-[48px] border border-slate-200 dark:border-white/5 shadow-2xl overflow-hidden backdrop-blur-3xl min-h-[500px]">
         {renderContent()}

@@ -10,6 +10,7 @@ export interface Doctor {
   fees: string;
   phone: string;
   timing: string;
+  registration_no?: string;
   // Added optional fields for UI components
   image?: string;
   rating?: string;

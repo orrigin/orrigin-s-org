@@ -34,7 +34,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onBack, onAuthSuccess }) => {
           .single();
 
         if (fetchError || !data) {
-          throw new Error("Invalid credentials. Please verify your registry email and password.");
+          throw new Error("Invalid credentials. Please verify your email and password.");
         }
 
         localStorage.setItem('aarogya_user', JSON.stringify({

@@ -113,6 +113,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
         body: (
           <div className="space-y-6 text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
             <p>AarogyaAI was born from a simple observation: Indian patients often waste critical time visiting the wrong specialists. In rural and semi-urban districts like Palghar, finding the right door is half the battle.</p>
+            <p>Our goal is to standardize healthcare discovery, making it transparent, data-driven, and accessible to every citizen regardless of their location.</p>
           </div>
         )
       },
@@ -221,6 +222,17 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onAdminLogin }) => {
             <ul className="space-y-4 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-colors">
               <li><button onClick={() => setActiveModal('about')} className="hover:text-emerald-500 text-left">About Our Mission</button></li>
               <li><button onClick={() => setActiveModal('contact')} className="hover:text-emerald-500 text-left">Broadcast Message</button></li>
+              <li className="pt-2">
+                <a 
+                  href="https://github.com/orrigin/orrigin-s-org?tab=readme-ov-file" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-block text-slate-400 hover:text-emerald-500 transition-all text-2xl"
+                  title="View on GitHub"
+                >
+                  <i className="fab fa-github"></i>
+                </a>
+              </li>
             </ul>
           </div>
         </div>
